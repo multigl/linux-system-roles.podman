@@ -166,14 +166,14 @@
 # parameters should be stripped out into separate vars
 - name: Manage firewall for specified ports
   include_role:
-    name: fedora.linux_system_roles.firewall
+    name: linux-system-roles.firewall
   vars:
     firewall: "{{ podman_firewall }}"
   when: podman_firewall | length > 0
 
 - name: Manage selinux for specified ports
   include_role:
-    name: fedora.linux_system_roles.selinux
+    name: linux-system-roles.firewall
   vars:
     selinux_ports: "{{ podman_selinux_ports }}"
   when: podman_selinux_ports | length > 0
