@@ -1,6 +1,46 @@
 Changelog
 =========
 
+[1.9.2] - 2026-01-07
+--------------------
+
+### Other Changes
+
+- ci: bump gha checkout from v5 to v6 (#256)
+- ci: add qemu tests for Fedora 43, drop Fedora 41 (#257)
+- ci: bump actions/upload-artifact from 5 to 6 (#258)
+- refactor: handle INJECT_FACTS_AS_VARS=false by using ansible_facts instead (#259)
+
+[1.9.1] - 2025-11-17
+--------------------
+
+### Bug Fixes
+
+- fix: cannot use community-general version 12 - no py27 and py36 support (#254)
+
+### Other Changes
+
+- ci: bump actions/upload-artifact from 4 to 5 (#250)
+- ci: use versioned upload-artifact instead of master; bump codeql-action to v4; bump upload-artifact to v5 (#251)
+- ci: bump tox-lsr to 3.13.0 (#252)
+- ci: bump tox-lsr to 3.14.0 - this moves standard-inventory-qcow2 to tox-lsr (#253)
+
+[1.9.0] - 2025-10-21
+--------------------
+
+### New Features
+
+- feat: Support this role in container builds (#245)
+
+### Other Changes
+
+- ci: rollout several recent changes to CI testing (#241)
+- ci: support openSUSE Leap in qemu/kvm test matrix (#242)
+- ci: use the new epel feature to enable EPEL for testing farm (#243)
+- ci: use tox-lsr 3.12.0 for osbuild_config.yml feature (#246)
+- ci: use JSON format for __bootc_validation (#247)
+- ci: bump actions/github-script from 7 to 8 (#248)
+
 [1.8.3] - 2025-07-24
 --------------------
 
