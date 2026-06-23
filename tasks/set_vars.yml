@@ -6,6 +6,12 @@
   when: __podman_required_facts |
     difference(ansible_facts.keys() | list) | length > 0
 
+- name: Record role begin fingerprint
+  sr_fingerprint:
+    sr_message: >-
+      begin system_role:podman ansible_version={{ ansible_version.full }}
+      {{ ansible_facts['distribution'] }}-{{ ansible_facts['distribution_version'] }}
+
 - name: Determine if system is ostree and set flag
   when: not __podman_is_ostree is defined
   block:
@@ -31,7 +37,7 @@
         __podman_is_transactional: "{{ __transactional_update_stat.stat.exists }}"
 
 - name: Set platform/version specific variables
-  include_vars: "{{ __vars_file }}"
+  include_vars: "{{ __vars_file_full }}"
   loop:
     - "{{ ansible_facts['os_family'] }}.yml"
     - "{{ ansible_facts['distribution'] }}.yml"
@@ -44,8 +50,8 @@
   loop_control:
     loop_var: __vars_file
   vars:
-    __vars_file: "{{ role_path }}/vars/{{ __vars_file }}"
-  when: __vars_file is file
+    __vars_file_full: "{{ role_path }}/vars/{{ __vars_file }}"
+  when: __vars_file_full is file
 
 - name: Determine if system is booted with systemd
   when: __podman_is_booted is not defined

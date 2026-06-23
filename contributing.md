@@ -20,6 +20,12 @@ are likely to be suitable for new contributors!
 **Code** is managed on [Github](https://github.com/linux-system-roles/podman), using
 [Pull Requests](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/about-pull-requests).
 
+## AI Coding Assistants
+
+The `.coderabbit.yaml` configuration file in the repository root contains coding
+standards and requirements that can be used by AI coding assistants to help
+generate code that follows project conventions.
+
 ## Running CI Tests Locally
 
 ### Use tox-lsr with qemu
@@ -54,7 +60,7 @@ The latest version of tox-lsr supports qemu testing.
    you can use e.g.
 
    ```bash
-   tox -e qemu-ansible-core-2.14 -- --image-name centos-9 tests/tests_default.yml
+   tox -e qemu-ansible-core-2-20 -- --image-name centos-9 tests/tests_default.yml
    ```
 
 There are many command line options and environment variables which can be used
