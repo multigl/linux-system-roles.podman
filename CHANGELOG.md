@@ -1,6 +1,95 @@
 Changelog
 =========
 
+[1.14.3] - 2026-09-17
+--------------------
+
+### Bug Fixes
+
+- fix: Relax collection-requirements version constraints (#323)
+
+### Other Changes
+
+- ci(build_docs): fix pandoc container syntax [citest_skip] (#327)
+- ci: [citest_skip] bump codespell-project/actions-codespell from 2.1 to 2.2 (#328)
+- ci: [citest_skip] bump myrotvorets/set-commit-status-action from 2774e1f040c82ed70a76b4b5cd53bb11ffaedd0a to c0f880c99d91381c6fdb97726f03feb8004409b4 (#329)
+- ci: [citest_skip] bump actions/download-artifact from 7.0.0 to 8.0.1 (#330)
+- refactor: Relax collection constraints, gate vendored modules by python version, update ci versions [citest_skip] (#331)
+- ci: do not run ci tests by default, require citest comment or label [citest_skip] (#332)
+- ci: replace weekly_ci with periodic_ci, stagger schedules [citest_skip] (#333)
+- ci: update status when action triggered by issue comment (#334)
+
+[1.14.2] - 2026-08-24
+--------------------
+
+### Bug Fixes
+
+- fix(quadlet_spec_paths): Test for file_src and template_src for restart should use length gt 0 (#325)
+
+### Other Changes
+
+- ci: use commit hash for github action, add persist-credentials false [citest_skip] (#320)
+- ci: refactor build_docs so that pandoc runs in isolated read-only job [citest_skip] (#321)
+- ci: use exact match for systemroller instead of contains [citest_skip] (#322)
+
+[1.14.1] - 2026-08-10
+--------------------
+
+### Bug Fixes
+
+- fix: re-order tasks to allow prune_images to complete on a new host (#318)
+
+[1.14.0] - 2026-08-06
+--------------------
+
+### New Features
+
+- feat: Write roles fingerprints to /var/log/sysroles.jsonl [citest_skip] (#316)
+
+### Other Changes
+
+- ci: bump actions/setup-python from 6 to 7 (#314)
+- ci: ensure dependabot updates do not invoke ci tests [citest_skip] (#315)
+
+[1.13.0] - 2026-07-27
+--------------------
+
+### New Features
+
+- feat: Add podman_run_as_ansible_user option (#307)
+- feat: prune unused images before pulling new ones during create/update (#312)
+
+### Bug Fixes
+
+- fix: support kube specs with multiple Kubernetes objects (#303)
+
+### Other Changes
+
+- ci: bump actions/checkout from 6 to 7 (#301)
+- ci: Use our own pr_title_lint.py instead of NPM commitlint [citest_skip] (#302)
+- refactor: regex_escape values used with match filter for exact matches (#306)
+- test: call manage_linger.yml with the correct parameters/variables (#308)
+- ci: bump tox-lsr version to 3.20.0 to fix tox 4.58 api breakage [citest_skip] (#309)
+- ci: Add support for Fedora 44 and drop Fedora 42 - use ansible-core 2.21 [citest_skip] (#311)
+
+[1.12.0] - 2026-06-24
+--------------------
+
+### New Features
+
+- feat: Add restarts and restarts_on to allow services to be restarted if dependencies change (#296)
+
+### Bug Fixes
+
+- fix: use correct repo name for copr repo (#298)
+
+### Other Changes
+
+- refactor: use ansible.posix 2.1.X for EL7 compatibility [citest_skip] (#292)
+- ci: Add config file for CodeRabbit with custom rules (#293)
+- ci: Skip reviews for PRs with [citest_skip] in the title (#294)
+- test: remove unused files [citest_skip] (#299)
+
 [1.11.1] - 2026-05-12
 --------------------
 

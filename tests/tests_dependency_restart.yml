@@ -3,6 +3,8 @@
 ---
 - name: Test dependency restarts
   hosts: all
+  vars_files:
+    - vars/test_vars.yml
   tags:
     - tests::booted  # this test is for restarting services
   vars:
@@ -12,7 +14,7 @@
     __dep_kube_file: /tmp/lsr_kube_dep_test.html
     __dep_port: 18081
     __dep_kube_port: 18082
-    __dep_image: docker.io/library/httpd:alpine
+    __dep_image: "{{ test_image }}"
     __dep_content_v1: "<html><body>version1</body></html>"
     __dep_content_v2: "<html><body>version2</body></html>"
     __dep_kube_pod:
@@ -24,11 +26,19 @@
         containers:
           - name: lsr-dep-kube
             image: "{{ __dep_image }}"
+            command:
+              - /bin/busybox-extras
+              - httpd
+              - -f
+              - -p
+              - "80"
+              - -h
+              - /
             ports:
               - containerPort: 80
                 hostPort: "{{ __dep_kube_port }}"
             volumeMounts:
-              - mountPath: /usr/local/apache2/htdocs/index.html:Z
+              - mountPath: /index.html:Z
                 name: www
                 readOnly: true
         volumes:
@@ -54,9 +64,10 @@
         WantedBy: default.target
       Container:
         Image: "{{ __dep_image }}"
+        Exec: /bin/busybox-extras httpd -f -p 80 -h /
         ContainerName: lsr-dep-http
         PublishPort: "{{ __dep_port }}:80"
-        Volume: "{{ __dep_file }}:/usr/local/apache2/htdocs/index.html:ro,Z"
+        Volume: "{{ __dep_file }}:/index.html:ro,Z"
   tasks:
     - name: Test explicit restarts on dependency file
       block:
@@ -74,9 +85,10 @@
                   WantedBy: default.target
                 Container:
                   Image: "{{ __dep_image }}"
+                  Exec: /bin/busybox-extras httpd -f -p 80 -h /
                   ContainerName: lsr-dep-http
                   PublishPort: "{{ __dep_port }}:80"
-                  Volume: "{{ __dep_file }}:/usr/local/apache2/htdocs/index.html:ro,Z"
+                  Volume: "{{ __dep_file }}:/index.html:ro,Z"
 
         - name: Wait for httpd to serve content
           uri:
@@ -101,9 +113,10 @@
                   WantedBy: default.target
                 Container:
                   Image: "{{ __dep_image }}"
+                  Exec: /bin/busybox-extras httpd -f -p 80 -h /
                   ContainerName: lsr-dep-http
                   PublishPort: "{{ __dep_port }}:80"
-                  Volume: "{{ __dep_file }}:/usr/local/apache2/htdocs/index.html:ro,Z"
+                  Volume: "{{ __dep_file }}:/index.html:ro,Z"
 
         - name: Verify container serves updated content
           uri:
@@ -120,6 +133,122 @@
 
       always:
         - name: Cleanup explicit restarts test
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            podman_quadlet_specs:
+              - name: lsr-dep-http
+                type: container
+                state: absent
+              - file: "{{ __dep_file }}"
+                state: absent
+
+    - name: Test explicit restarts on template_src dependency file
+      block:
+        - name: Run role - deploy template_src dependency and container
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            __dep_template_version: version1
+            podman_quadlet_specs:
+              - file: "{{ __dep_file }}"
+                template_src: templates/lsr-dep-index.html.j2
+                restarts: [lsr-dep-http]
+              - "{{ __dep_quadlet_container }}"
+
+        - name: Wait for httpd to serve template_src content
+          uri:
+            url: "http://127.0.0.1:{{ __dep_port }}/"
+            return_content: true
+          register: __dep_http_tmpl_v1
+          until: __dep_http_tmpl_v1.content is search('version1')
+          retries: 15
+          delay: 2
+
+        - name: Run role - update template_src dependency file
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            __dep_template_version: version2
+            podman_quadlet_specs:
+              - file: "{{ __dep_file }}"
+                template_src: templates/lsr-dep-index.html.j2
+                restarts: [lsr-dep-http]
+              - "{{ __dep_quadlet_container }}"
+
+        - name: Verify container serves updated template_src content
+          uri:
+            url: "http://127.0.0.1:{{ __dep_port }}/"
+            return_content: true
+          register: __dep_http_tmpl_v2
+          until: __dep_http_tmpl_v2.content is search('version2')
+          retries: 15
+          delay: 2
+
+        - name: Assert updated template_src content
+          assert:
+            that: __dep_http_tmpl_v2.content is search('version2')
+
+      always:
+        - name: Cleanup template_src restarts test
+          tags:
+            - tests::cleanup
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            podman_quadlet_specs:
+              - name: lsr-dep-http
+                type: container
+                state: absent
+              - file: "{{ __dep_file }}"
+                state: absent
+
+    - name: Test explicit restarts on file_src dependency file
+      block:
+        - name: Run role - deploy file_src dependency and container
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            podman_quadlet_specs:
+              - file: "{{ __dep_file }}"
+                file_src: files/lsr-dep-index-v1.html
+                restarts: [lsr-dep-http]
+              - "{{ __dep_quadlet_container }}"
+
+        - name: Wait for httpd to serve file_src content
+          uri:
+            url: "http://127.0.0.1:{{ __dep_port }}/"
+            return_content: true
+          register: __dep_http_fsrc_v1
+          until: __dep_http_fsrc_v1.content is search('version1')
+          retries: 15
+          delay: 2
+
+        - name: Run role - update file_src dependency file
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            podman_quadlet_specs:
+              - file: "{{ __dep_file }}"
+                file_src: files/lsr-dep-index-v2.html
+                restarts: [lsr-dep-http]
+              - "{{ __dep_quadlet_container }}"
+
+        - name: Verify container serves updated file_src content
+          uri:
+            url: "http://127.0.0.1:{{ __dep_port }}/"
+            return_content: true
+          register: __dep_http_fsrc_v2
+          until: __dep_http_fsrc_v2.content is search('version2')
+          retries: 15
+          delay: 2
+
+        - name: Assert updated file_src content
+          assert:
+            that: __dep_http_fsrc_v2.content is search('version2')
+
+      always:
+        - name: Cleanup file_src restarts test
+          tags:
+            - tests::cleanup
           include_tasks: tasks/run_role_with_clear_facts.yml
           vars:
             podman_quadlet_specs:
@@ -340,9 +469,10 @@
                   WantedBy: default.target
                 Container:
                   Image: "{{ __dep_image }}"
+                  Exec: /bin/busybox-extras httpd -f -p 80 -h /
                   ContainerName: lsr-dep-http
                   PublishPort: "{{ __dep_port }}:80"
-                  Volume: "{{ __dep_file }}:/usr/local/apache2/htdocs/index.html:ro,Z"
+                  Volume: "{{ __dep_file }}:/index.html:ro,Z"
 
         - name: Update file with ALL_SERVICES
           include_tasks: tasks/run_role_with_clear_facts.yml
@@ -358,9 +488,10 @@
                   WantedBy: default.target
                 Container:
                   Image: "{{ __dep_image }}"
+                  Exec: /bin/busybox-extras httpd -f -p 80 -h /
                   ContainerName: lsr-dep-http
                   PublishPort: "{{ __dep_port }}:80"
-                  Volume: "{{ __dep_file }}:/usr/local/apache2/htdocs/index.html:ro,Z"
+                  Volume: "{{ __dep_file }}:/index.html:ro,Z"
 
         - name: Verify ALL_SERVICES restart
           uri:
@@ -400,9 +531,10 @@
                   WantedBy: default.target
                 Container:
                   Image: "{{ __dep_image }}"
+                  Exec: /bin/busybox-extras httpd -f -p 80 -h /
                   ContainerName: lsr-dep-http
                   PublishPort: "{{ __dep_port }}:80"
-                  Volume: "{{ __dep_file }}:/usr/local/apache2/htdocs/index.html:ro,Z"
+                  Volume: "{{ __dep_file }}:/index.html:ro,Z"
 
         - name: Update via restarts_on
           include_tasks: tasks/run_role_with_clear_facts.yml
@@ -420,9 +552,10 @@
                   WantedBy: default.target
                 Container:
                   Image: "{{ __dep_image }}"
+                  Exec: /bin/busybox-extras httpd -f -p 80 -h /
                   ContainerName: lsr-dep-http
                   PublishPort: "{{ __dep_port }}:80"
-                  Volume: "{{ __dep_file }}:/usr/local/apache2/htdocs/index.html:ro,Z"
+                  Volume: "{{ __dep_file }}:/index.html:ro,Z"
 
         - name: Verify restarts_on path
           uri:
@@ -461,9 +594,10 @@
                   WantedBy: default.target
                 Container:
                   Image: "{{ __dep_image }}"
+                  Exec: /bin/busybox-extras httpd -f -p 80 -h /
                   ContainerName: lsr-dep-http
                   PublishPort: "{{ __dep_port }}:80"
-                  Volume: "{{ __dep_file }}:/usr/local/apache2/htdocs/index.html:ro,Z"
+                  Volume: "{{ __dep_file }}:/index.html:ro,Z"
 
         - name: Update via ANY_DEPENDENCIES
           include_tasks: tasks/run_role_with_clear_facts.yml
@@ -480,9 +614,10 @@
                   WantedBy: default.target
                 Container:
                   Image: "{{ __dep_image }}"
+                  Exec: /bin/busybox-extras httpd -f -p 80 -h /
                   ContainerName: lsr-dep-http
                   PublishPort: "{{ __dep_port }}:80"
-                  Volume: "{{ __dep_file }}:/usr/local/apache2/htdocs/index.html:ro,Z"
+                  Volume: "{{ __dep_file }}:/index.html:ro,Z"
 
         - name: Verify ANY_DEPENDENCIES restart
           uri:
@@ -519,9 +654,10 @@
                   WantedBy: default.target
                 Container:
                   Image: "{{ __dep_image }}"
+                  Exec: /bin/busybox-extras httpd -f -p 80 -h /
                   ContainerName: lsr-dep-http
                   PublishPort: "{{ __dep_port }}:80"
-                  Volume: "{{ __dep_file }}:/usr/local/apache2/htdocs/index.html:ro,Z"
+                  Volume: "{{ __dep_file }}:/index.html:ro,Z"
 
         - name: Remove dependency file
           include_tasks: tasks/run_role_with_clear_facts.yml
@@ -570,9 +706,10 @@
                   WantedBy: default.target
                 Container:
                   Image: "{{ __dep_image }}"
+                  Exec: /bin/busybox-extras httpd -f -p 80 -h /
                   ContainerName: lsr-dep-http
                   PublishPort: "{{ __dep_port }}:80"
-                  Volume: "{{ __dep_file }}:/usr/local/apache2/htdocs/index.html:ro,Z"
+                  Volume: "{{ __dep_file }}:/index.html:ro,Z"
 
         - name: Run role again with same configuration
           include_tasks: tasks/run_role_with_clear_facts.yml
@@ -588,9 +725,10 @@
                   WantedBy: default.target
                 Container:
                   Image: "{{ __dep_image }}"
+                  Exec: /bin/busybox-extras httpd -f -p 80 -h /
                   ContainerName: lsr-dep-http
                   PublishPort: "{{ __dep_port }}:80"
-                  Volume: "{{ __dep_file }}:/usr/local/apache2/htdocs/index.html:ro,Z"
+                  Volume: "{{ __dep_file }}:/index.html:ro,Z"
 
         - name: Verify service still serves content after idempotent run
           uri:
@@ -632,6 +770,7 @@
                   WantedBy: default.target
                 Container:
                   Image: "{{ __dep_image }}"
+                  Exec: /bin/busybox-extras httpd -f -p 80
                   ContainerName: lsr-dep-http
                   PublishPort: "{{ __dep_port }}:80"
                   PodmanArgs: >-
@@ -653,6 +792,7 @@
                   WantedBy: default.target
                 Container:
                   Image: "{{ __dep_image }}"
+                  Exec: /bin/busybox-extras httpd -f -p 80
                   ContainerName: lsr-dep-http
                   PublishPort: "{{ __dep_port }}:80"
 

@@ -3,6 +3,9 @@
 - name: Set platform/version specific variables
   include_tasks: set_vars.yml
 
+- name: Validate role parameters
+  ansible.builtin.include_tasks: assert_role_vars.yml
+
 - name: Gather the package facts
   package_facts:
   no_log: "{{ ansible_verbosity < 3 }}"
@@ -21,10 +24,21 @@
   when: (__podman_packages | difference(ansible_facts.packages)) | list | length > 0
   register: podman_package_result
 
+# A staged install reports ok on re-runs, so ask rpm (by provides) if it is live.
+- name: Check whether the packages are live on a transactional update system
+  command:  # noqa command-instead-of-module
+    argv: "{{ ['rpm', '-q', '--whatprovides'] + (__podman_packages) }}"
+  register: __podman_packages_live
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: __podman_is_transactional | d(false)
+
 - name: Handle reboot for transactional update systems
   when:
     - __podman_is_transactional | d(false)
-    - podman_package_result is changed
+    - podman_package_result is changed or
+      (__podman_packages_live.rc | d(0)) != 0
   block:
     - name: Notify user that reboot is needed to apply changes
       debug:
@@ -34,7 +48,9 @@
     - name: Reboot transactional update systems
       reboot:
         msg: Rebooting the system to apply transactional update changes.
-      when: podman_transactional_update_reboot_ok | bool
+      when:
+        - podman_transactional_update_reboot_ok is not none
+        - podman_transactional_update_reboot_ok | bool
 
     - name: Fail if reboot is needed and not set
       fail:
@@ -119,6 +135,17 @@
     __has_pod_template_src_ext_j2: "{{ podman_quadlet_specs | selectattr('template_src', 'defined') |
       selectattr('template_src', 'search', '.pod.j2$') | list | length > 0 }}"
 
+# This will affect the value of podman_run_as_user if it is not explicitly set
+- name: Get current user via whoami when ansible_user is undefined
+  command: whoami
+  register: __podman_whoami
+  changed_when: false
+  check_mode: false
+  when:
+    - podman_run_as_ansible_user | bool
+    - ansible_user is not defined
+    - podman_run_as_user == 'root'
+
 - name: Check user and group information
   include_tasks: handle_user_group.yml
   vars:
@@ -200,6 +227,11 @@
     loop_var: __podman_credential_item
   no_log: "{{ podman_secure_logging }}"
 
+# does nothing if podman_kube_specs is empty
+- name: Parse kube specs
+  include_tasks: parse_kube_specs.yml
+  no_log: "{{ podman_secure_logging }}"
+
 - name: Build restart dependency map
   include_tasks: build_restart_map.yml
   when:
@@ -216,9 +248,10 @@
 
 - name: Handle Kubernetes specifications
   include_tasks: handle_kube_spec.yml
-  loop: "{{ podman_kube_specs }}"
+  loop: "{{ __podman_kube_specs_parsed }}"
   loop_control:
-    loop_var: __podman_kube_spec_item
+    loop_var: __podman_kube_parsed
+  when: __podman_kube_specs_parsed | length > 0
   no_log: "{{ podman_secure_logging }}"
 
 - name: Handle Quadlet specifications
@@ -259,6 +292,10 @@
 
 - name: Record role success fingerprint
   sr_fingerprint:
-    sr_message: >-
-      success system_role:podman ansible_version={{ ansible_version.full }}
-      {{ ansible_facts['distribution'] }}-{{ ansible_facts['distribution_version'] }}
+    status: success
+    role_name: podman
+    role_path: "{{ role_path }}"
+    ansible_play_hosts_all: "{{ ansible_play_hosts_all }}"
+    distribution: "{{ ansible_facts['distribution'] }}"
+    distribution_version: "{{ ansible_facts['distribution_version'] }}"
+    write_log_file: "{{ __podman_write_log_file }}"

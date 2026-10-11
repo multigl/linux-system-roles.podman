@@ -1,6 +1,6 @@
 # podman
 
-[![ansible-lint.yml](https://github.com/linux-system-roles/podman/actions/workflows/ansible-lint.yml/badge.svg)](https://github.com/linux-system-roles/podman/actions/workflows/ansible-lint.yml) [![ansible-test.yml](https://github.com/linux-system-roles/podman/actions/workflows/ansible-test.yml/badge.svg)](https://github.com/linux-system-roles/podman/actions/workflows/ansible-test.yml) [![codespell.yml](https://github.com/linux-system-roles/podman/actions/workflows/codespell.yml/badge.svg)](https://github.com/linux-system-roles/podman/actions/workflows/codespell.yml) [![markdownlint.yml](https://github.com/linux-system-roles/podman/actions/workflows/markdownlint.yml/badge.svg)](https://github.com/linux-system-roles/podman/actions/workflows/markdownlint.yml) [![qemu-kvm-integration-tests.yml](https://github.com/linux-system-roles/podman/actions/workflows/qemu-kvm-integration-tests.yml/badge.svg)](https://github.com/linux-system-roles/podman/actions/workflows/qemu-kvm-integration-tests.yml) [![tft.yml](https://github.com/linux-system-roles/podman/actions/workflows/tft.yml/badge.svg)](https://github.com/linux-system-roles/podman/actions/workflows/tft.yml) [![tft_citest_bad.yml](https://github.com/linux-system-roles/podman/actions/workflows/tft_citest_bad.yml/badge.svg)](https://github.com/linux-system-roles/podman/actions/workflows/tft_citest_bad.yml) [![woke.yml](https://github.com/linux-system-roles/podman/actions/workflows/woke.yml/badge.svg)](https://github.com/linux-system-roles/podman/actions/workflows/woke.yml)
+[![citest.yml](https://github.com/linux-system-roles/podman/actions/workflows/citest.yml/badge.svg)](https://github.com/linux-system-roles/podman/actions/workflows/citest.yml)
 
 This role manages `podman` configuration, containers, and systemd services which
 run `podman` containers.
@@ -84,7 +84,7 @@ except for the following:
   treat this as a fatal error, and continue with the role.  If you do not
   specify this, then the global default `podman_continue_if_pull_fails` will be
   used, which is `false` by default.
-* `restarts_on` - List of managed file paths (via `podman_quadlet_specs` file
+* `restarts_on` - List of managed file paths (via `podman_kube_specs` file
   items) and/or `podman_secrets` names to watch from this kube play spec.
   When any listed dependency changes or is removed, the pod's systemd service
   is restarted. Supports `ANY_DEPENDENCIES` with the same meaning as for
@@ -95,20 +95,23 @@ except for the following:
   YAML format.  Do not specify this if you specify `kube_file_content`.
   `kube_file_content` takes precedence over `kube_file_src`.
 * `kube_file_content` - This is either a string in Kubernetes YAML format, or a
-  `dict` in Kubernetes YAML format.  It will be used as the contents of
-  `kube_file` on the managed node.  Do not specify this if you specify
-  `kube_file_src`. `kube_file_content` takes precedence over `kube_file_src`.
+  `dict` or `list` of `dict` in Kubernetes YAML format.  It will be used as the
+  contents of `kube_file` on the managed node.  Do not specify this if you
+  specify `kube_file_src`. `kube_file_content` takes precedence over
+  `kube_file_src`.
 * `kube_file` - This is the name of a file on the managed node that contains the
-  Kubernetes specification of the container/pod.  You typically do not have to specify
-  this unless you need to somehow copy this file to the managed node outside of the
-  role.  If you specify either `kube_file_src` or `kube_file_content`, you
-  do not have to specify this.  It is highly recommended to omit `kube_file` and
-  instead specify either `kube_file_src` or `kube_file_content` and let the role
-  manage the file path and name.
+  Kubernetes specification of the container/pod.  You typically do not have to
+  specify this unless you need to somehow copy this file to the managed node
+  outside of the role.  If you specify either `kube_file_src` or
+  `kube_file_content`, you do not have to specify this.  It is highly
+  recommended to omit `kube_file` and instead specify either `kube_file_src` or
+  `kube_file_content` and let the role manage the file path and name.
   * The file basename will be the `metadata.name` value from the K8s yaml, with a
     `.yml` suffix appended to it.
-  * The directory will be `/etc/containers/ansible-kubernetes.d` for system services.
-  * The directory will be `$HOME/.config/containers/ansible-kubernetes.d` for user services.
+  * The directory will be `/etc/containers/ansible-kubernetes.d` for system
+    services.
+  * The directory will be `$HOME/.config/containers/ansible-kubernetes.d` for
+    user services.
 
 For example, if you have
 
@@ -269,9 +272,15 @@ This is a boolean, default value is `false`.  If `true`, the role will ensure
 host directories specified in host mounts in `volumes.hostPath` specifications
 in the Kubernetes YAML given in `podman_kube_specs`, and from `Volume`
 configuration in quadlet Container specification where a host path is specified.
-NOTE: Directories must be specified as absolute paths (for root containers), or
-paths relative to the home directory (for non-root containers), in order for the
-role to manage them. Anything else will be assumed to be some other sort of
+NOTE: For Kubernetes `hostPath` volumes, directories must be specified as
+absolute paths (for root containers), or paths relative to the home directory
+(for non-root containers), in order for the role to manage them. For a quadlet
+`Volume`, the host path must be absolute or start with `.`; a path that starts
+with `.` is resolved relative to the directory of the quadlet unit file, as
+Quadlet does. For example, `Volume: ./data:/data` creates
+`/etc/containers/systemd/data` for root containers and
+`$HOME/.config/containers/systemd/data` for rootless containers. Anything else,
+such as a named volume (`data:/data`), will be assumed to be some other sort of
 volume and will be ignored. The role will apply its default
 ownership/permissions to the directories. If you need to set
 ownership/permissions, see `podman_host_directories`.
@@ -331,7 +340,17 @@ podman_selinux_ports:
 This is the name of the user to use for all rootless containers.  You can also
 specify per-container username with `run_as_user` in `podman_kube_specs`.  NOTE:
 The user must already exist - the role will not create one.  The user must be
-present in `/etc/subuid` and `/etc/subgid`.
+present in `/etc/subuid` and `/etc/subgid`.  The default is `root`, unless
+`podman_run_as_ansible_user` is `true`, in which case the default is the value
+of `ansible_user` (or the result of `whoami` on the managed host if
+`ansible_user` is not set).
+
+### podman_run_as_ansible_user
+
+If `true`, use the value of `ansible_user` as the default for
+`podman_run_as_user` instead of `root`.  The default is `false`.  Setting
+`podman_run_as_user` explicitly overrides this.  If `ansible_user` is not
+defined the role falls back to the output of `whoami` on the managed host.
 
 ### podman_run_as_group
 
@@ -584,9 +603,16 @@ can override this on a per-spec basis using `validate_certs`.
 
 ### podman_prune_images
 
-Boolean - default is `false` - by default, the role will not prune unused images
-when removing quadlets and other resources.  Set this to `true` to tell the role
-to remove unused images when cleaning up.
+Boolean - default is `false` - set this to `true` to remove unused images.
+The removal runs in two cases:
+
+* **Create/update** - before pulling new images, all unused images are pruned.
+  Because the prune runs while the current container is still running, its image
+  is still in use and will not be pruned, providing a natural rollback to the
+  previous version.
+* **Cleanup** (`state: absent`) - after removing a quadlet or kube spec, only
+  the images that belonged to the removed spec are deleted. Images used by other
+  specs are not affected.
 
 ### podman_transactional_update_reboot_ok
 
@@ -728,24 +754,37 @@ Create rootless container with volume mount:
         run_as_user: dbuser
         run_as_group: dbgroup
         kube_file_content:
-          apiVersion: v1
-          kind: Pod
-          metadata:
-            name: db
-          spec:
-            containers:
-              - name: db
-                image: quay.io/db/db:stable
-                ports:
-                  - containerPort: 1234
-                    hostPort: 12340
-                volumeMounts:
-                  - mountPath: /var/lib/db:Z
-                    name: db
-            volumes:
-              - name: db
-                hostPath:
-                  path: /var/lib/db
+          - apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: db_config
+            data:
+              db_config: |
+                # database config goes here
+          - apiVersion: v1
+            kind: Pod
+            metadata:
+              name: db
+            spec:
+              containers:
+                - name: db
+                  image: quay.io/db/db:stable
+                  ports:
+                    - containerPort: 1234
+                      hostPort: 12340
+                  volumeMounts:
+                    - mountPath: /var/lib/db:Z
+                      name: db
+                    - mountPath: /etc/db_config.conf:Z
+                      name: db_config
+                      subPath: db_config.conf
+              volumes:
+                - name: db
+                  hostPath:
+                    path: /var/lib/db
+                - name: db_config
+                  configMap:
+                    name: db_config
       - state: started
         run_as_user: webapp
         run_as_group: webapp
